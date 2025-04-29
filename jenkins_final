@@ -1,0 +1,86 @@
+pipeline { 
+   agent any 
+// Specify the maven installation to use for this pipeline. 
+// 'maven3' refers to a Maven installation configured in Jenkins. 
+       tools { 
+         maven 'maven' 
+    } 
+stages { 
+        stage('Checkout') { 
+steps { 
+echo 'Cloning GIT HUB Repo'
+ // Clone the specified branch from the GitHub repository 
+                git 'https://github.com/KODURU8686/Devopsdemo.git' 
+            }   
+        } 
+ 
+        stage('SonarQube Scan') { 
+            steps { 
+                echo 'Scanning project' 
+                // List directory contents for debugging purposes 
+                sh 'ls -ltr' 
+                // Run SonarQube scan with specified SonarQube server and login token 
+                sh ''' mvn sonar:sonar \\
+                      -Dsonar.host.url=http://13.60.242.102:9000 \\
+                      -Dsonar.login=squ_7bd000eb9d0a9a773091ef18a9640f715a44881b''' 
+            } 
+        } 
+ 
+        stage('Build Artifact') { 
+            steps { 
+                echo 'Build Artifact' 
+                // Clean and package the project using Maven 
+                sh 'mvn clean package' 
+            } 
+        } 
+ 
+        stage('Build Docker Image') { 
+            steps { 
+                echo 'Build Docker Image' 
+                // Build the Docker image using the Dockerfile in the project 
+                // Tag the image with the current build number 
+                sh 'docker build -t naveenkoduru005/devopsdemo333:${BUILD_NUMBER} .' 
+            } 
+        } 
+ 
+        stage('Push to Docker Hub') { 
+            steps { 
+                script { 
+                    // Use Dockerhub credentials to access Docker Hub 
+                    withCredentials([string(credentialsId: 'dockerhub', variable: 'dockerhub')]) { 
+                        sh 'docker login -u naveenkoduru005 -p ${dockerhub}' 
+                        
+                    } 
+                    // Push the Docker image to Docker Hub 
+                    sh 'docker push naveenkoduru005/devopsdemo333:${BUILD_NUMBER}' 
+                    echo 'Pushed to Docker Hub' 
+                } 
+            } 
+        } 
+ 
+        stage('Update Deployment File') { 
+            environment { 
+                GIT_REPO_NAME = "Devopsdemo" 
+                GIT_USER_NAME = "Koduru8686" 
+            } 
+            steps { 
+                echo 'Update Deployment File' 
+                // Use Githubtoken to access GitHub 
+                withCredentials([string(credentialsId: 'githubtoken', variable: 'GITHUB_TOKEN')]) {
+                sh '''
+                git config user.email "koduru.naveen005@gmail.com"
+                git config user.name "koduru8686"
+                sed -i "s/batch14:.*/batch14:${BUILD_NUMBER}/g" deploymentfiles/deployment.yml
+                git add .
+                git commit -m "Update deployment image to version ${BUILD_NUMBER}"
+                git push https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME} HEAD:master
+             '''
+
+
+                        
+                } 
+            } 
+         
+        }
+    } 
+} 
